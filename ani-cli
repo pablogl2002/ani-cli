@@ -86,6 +86,8 @@ help_info() {
         Use given title as ani-skip query
       -N, --nextep-countdown
         Display a countdown to the next episode
+      -T, --torrent
+        Stream a torrent directly (magnet URI, .torrent file, or info hash)
       -U, --update
         Update the script
     Some example usages:
@@ -142,6 +144,46 @@ cleanup() {
     [ "$player_function" = "android_mpv" ] && : >"/storage/emulated/0/mpv/mpv.config.mp4"
     printf "\033[0m"        # clears colors
     rm -f "${histfile}.new" # remove temp logfile
+    # ponytail: kill by PID + children for reliable cleanup across webtorrent versions
+    kill "$webtorrent_pid" 2>/dev/null
+    pkill -P "$webtorrent_pid" 2>/dev/null
+    wait "$webtorrent_pid" 2>/dev/null
+}
+
+validate_torrent_input() {
+    case "$1" in
+        magnet:*) ;;
+        *.torrent) ;;
+        *)
+            if printf "%s" "$1" | grep -qE '^[a-fA-F0-9]{40}$'; then
+                set -- "magnet:?xt=urn:btih:$(printf "%s" "$1" | tr '[:upper:]' '[:lower:]')"
+            else
+                die "Invalid torrent input. Use magnet URI, .torrent file/URL, or 40-char info hash."
+            fi
+            ;;
+    esac
+    torrent_id="$1"
+}
+
+torrent_player_flag() {
+    case "$player_function" in
+        mpv*|flatpak_mpv) printf "%s" "--mpv" ;;
+        *iina*) printf "%s" "--iina" ;;
+        vlc*) printf "%s" "--vlc" ;;
+        download|debug|catt|iSH|*yncpla*) die "Player $player_function is not supported with --torrent in v1" ;;
+        *) printf "%s" "--mpv" ;;  # ponytail: assume mpv-compat for unknown
+    esac
+}
+
+play_torrent() {
+    torrent_dir="${ANI_CLI_TORRENT_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/ani-cli/torrents}"
+    mkdir -p "$torrent_dir" || die "Failed to create torrent cache dir"
+    [ "$player_function" = "flatpak_mpv" ] && die "flatpak mpv not supported with --torrent in v1. Use native mpv or specify mpv via ANI_CLI_PLAYER."
+    player_flag=$(torrent_player_flag)
+    # ponytail: --port 0 for random port, -o for cache dir, no --player-args in v1
+    webtorrent "$torrent_id" -o "$torrent_dir" -p 0 $player_flag &
+    webtorrent_pid=$!
+    [ "$no_detach" = 1 ] && wait "$webtorrent_pid"
 }
 
 # SCRAPING
@@ -585,10 +627,17 @@ while [ $# -gt 0 ]; do
             branch="${2:-$branch}"
             update_script
             ;;
+        -T | --torrent)
+            [ $# -lt 2 ] && die "missing torrent identifier!"
+            torrent_mode=1
+            torrent_id="$2"
+            shift
+            ;;
         *) query="$(printf "%s" "$query $1" | sed "s|^ ||;s| |+|g")" ;;
     esac
     shift
 done
+[ "$torrent_mode" = 1 ] && [ "$player_function" = "download" ] && die "--torrent and --download are mutually exclusive"
 [ "$use_external_menu" = "0" ] && multi_selection_flag="${ANI_CLI_MULTI_SELECTION:-"-m"}"
 [ "$use_external_menu" = "1" ] && multi_selection_flag="${ANI_CLI_MULTI_SELECTION:-"-multi-select"}"
 [ "$external_menu_normal_window" = "1" ] && external_menu_args="-normal-window"
@@ -611,6 +660,15 @@ esac
 
 # idk where to put this, so I put it here...
 trap 'cleanup; exit 1' INT HUP
+
+# torrent mode early exit
+[ "$torrent_mode" = 1 ] && {
+    dep_ch "webtorrent" "node"
+    validate_torrent_input "$torrent_id"
+    play_torrent
+    cleanup
+    exit 0
+}
 
 # searching
 case "$search" in

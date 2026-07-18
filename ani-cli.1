@@ -43,6 +43,10 @@ Watch anime together with friends, using Syncplay (works with mpv only).
 \fB\-U | --update\fR
 Fetch update from github.
 .TP
+\fB\-T | --torrent\fR \fI\,<magnet|file|hash>\/\fR
+Stream a torrent directly instead of scraping allanime.
+Accepts magnet URIs, .torrent file paths/URLs, or 40-char info hashes.
+.TP
 \fB\-v | --vlc\fR
 Use VLC as the media player.
 .TP
@@ -113,6 +117,9 @@ Controls if mpv is detached from the main process for playback, which can be use
 .TP
 \fBANI_CLI_SKIP_TITLE\fR
 Overrides the anime title to query for skip times. Can be any string value. Default is empty, resolving to the anime title as given by ani-cli.
+.TP
+\fBANI_CLI_TORRENT_DIR\fR
+Directory for partial torrent downloads. Default is $XDG_CACHE_HOME/ani-cli/torrents.
 .PP
 .SH EPISODE SELECTION
 .PP

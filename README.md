@@ -535,6 +535,7 @@ apk del grep sed curl fzf git aria2 ffmpeg ncurses
 - fzf - User interface
 - openssl (for decrypting encrypted video sources; on Termux, the CLI is in the `openssl-tool` package)
 - ani-skip (optional, for auto-skipping anime intros)
+- webtorrent-cli (optional, for --torrent streaming; install with `npm install -g webtorrent-cli`)
 - patch - Self updating
 
 ### Ani-Skip
