@@ -86,6 +86,8 @@ help_info() {
         Use given title as ani-skip query
       -N, --nextep-countdown
         Display a countdown to the next episode
+      --nyaa
+        Search nyaa.si for torrents to stream (requires webtorrent-cli)
       -T, --torrent
         Stream a torrent directly (magnet URI, .torrent file, or info hash)
       -U, --update
@@ -97,7 +99,9 @@ help_info() {
       %s --vlc cyberpunk edgerunners -q 1080p -e 4
       %s blue lock -e 5-6
       %s -e \"5 6\" blue lock
-    \n" "${0##*/}" "${0##*/}" "${0##*/}" "${0##*/}" "${0##*/}" "${0##*/}" "${0##*/}" "${0##*/}" "${0##*/}"
+      %s --nyaa \"one piece\"
+      %s --nyaa \"frieren\" --vlc
+    \n" "${0##*/}" "${0##*/}" "${0##*/}" "${0##*/}" "${0##*/}" "${0##*/}" "${0##*/}" "${0##*/}" "${0##*/}" "${0##*/}" "${0##*/}"
     exit 0
 }
 
@@ -375,6 +379,18 @@ search_anime() {
 | g' | sed -nE "s|.*_id\":\"([^\"]*)\",\"name\":\"([^\"]*)\",.*${mode}\":([1-9][^,]*).*year\":([1-9][^,]*).*|\1	\2 (\3 episodes) (\4)|p" | sed 's/\\"//g'
 }
 
+search_nyaa() {
+    curl -sL -A "$agent" "${nyaa_base}/?f=${nyaa_filter}&c=${nyaa_category}&q=${1}&s=seeders&o=desc" |
+    tr '\n' ' ' |
+    sed 's|<tr class|\n<tr class|g' |
+    sed -nE '
+        /href="magnet:/!b
+        s|.*title="([^"]*)".*href="(magnet:[^"]*)".*</td>[[:space:]]*<td class="text-center">([^<]*)</td>.*<td class="text-center"[^>]*>[^<]*</td>[[:space:]]*<td class="text-center">([0-9]+)</td>.*|\2\t\1 (\4 S, \3)|
+        s|&amp;|\&|g
+        p
+    '
+}
+
 time_until_next_ep() {
     animeschedule="https://animeschedule.net"
     query="$(printf "%s\n" "$*" | tr ' ' '+')"
@@ -556,6 +572,9 @@ histfile="$hist_dir/ani-hsts"
 [ ! -f "$histfile" ] && : >"$histfile"
 search="${ANI_CLI_DEFAULT_SOURCE:-scrape}"
 branch="${ANI_CLI_BRANCH:-master}"
+nyaa_base="${ANI_CLI_NYAA_BASE:-https://nyaa.si}"
+nyaa_category="${ANI_CLI_NYAA_CATEGORY:-1_2}"
+nyaa_filter="${ANI_CLI_NYAA_FILTER:-0}"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -612,6 +631,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         --dub) mode="dub" ;;
+        --nyaa) nyaa_mode=1 ;;
         --no-detach) no_detach=1 ;;
         --exit-after-play) exit_after_play=1 && no_detach=1 ;;
         --rofi) use_external_menu=1 ;;
@@ -638,6 +658,8 @@ while [ $# -gt 0 ]; do
     shift
 done
 [ "$torrent_mode" = 1 ] && [ "$player_function" = "download" ] && die "--torrent and --download are mutually exclusive"
+[ "$nyaa_mode" = 1 ] && [ "$torrent_mode" = 1 ] && die "--nyaa and --torrent are mutually exclusive"
+[ "$nyaa_mode" = 1 ] && [ "$player_function" = "download" ] && die "--nyaa and --download are mutually exclusive"
 [ "$use_external_menu" = "0" ] && multi_selection_flag="${ANI_CLI_MULTI_SELECTION:-"-m"}"
 [ "$use_external_menu" = "1" ] && multi_selection_flag="${ANI_CLI_MULTI_SELECTION:-"-multi-select"}"
 [ "$external_menu_normal_window" = "1" ] && external_menu_args="-normal-window"
@@ -664,6 +686,36 @@ trap 'cleanup; exit 1' INT HUP
 # torrent mode early exit
 [ "$torrent_mode" = 1 ] && {
     dep_ch "webtorrent" "node"
+    validate_torrent_input "$torrent_id"
+    play_torrent
+    cleanup
+    exit 0
+}
+
+# nyaa mode
+[ "$nyaa_mode" = 1 ] && {
+    dep_ch "webtorrent" "node"
+    [ "$mode" = "dub" ] && query="${query} dub"
+    [ -n "$ep_no" ] && query="${query} ${ep_no}"
+    # prompt for query if empty
+    if [ "$use_external_menu" = "0" ]; then
+        while [ -z "$query" ]; do
+            printf "\33[2K\r\033[1;36mSearch nyaa: \033[0m" && read -r query
+        done
+    else
+        [ -z "$query" ] && query=$(printf "" | external_menu "" "Search nyaa: " "$external_menu_args")
+        [ -z "$query" ] && exit 1
+    fi
+    query=$(printf "%s" "$query" | sed "s| |+|g")
+    anime_list=$(search_nyaa "$query")
+    [ -z "$anime_list" ] && die "No results found on nyaa.si!"
+    tput cuu1 && tput el
+    tput sc
+    [ "$index" -eq "$index" ] 2>/dev/null && result=$(printf "%s" "$anime_list" | sed -n "${index}p")
+    [ -z "$index" ] && result=$(printf "%s" "$anime_list" | nl -w 2 | sed 's/^[[:space:]]//' | nth "Select torrent: ")
+    [ -z "$result" ] && exit 1
+    torrent_id=$(printf "%s" "$result" | cut -f1)
+    title=$(printf "%s" "$result" | cut -f2)
     validate_torrent_input "$torrent_id"
     play_torrent
     cleanup

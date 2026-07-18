@@ -59,6 +59,10 @@ Prints a countdown to the next episode as the last episode in the list. If in hi
 \fB\--dub\fR
 Play the dubbed version. Without this flag, it'll always play the subbed version.
 .TP
+\fB\--nyaa\fR
+Search nyaa.si for torrent releases to stream via webtorrent-cli.
+Use \f[B]\-e\fR to append an episode number to the search query.
+.TP
 \fB\--rofi\fR
 Use rofi instead of fzf for the interactive menu
 .TP
@@ -120,6 +124,15 @@ Overrides the anime title to query for skip times. Can be any string value. Defa
 .TP
 \fBANI_CLI_TORRENT_DIR\fR
 Directory for partial torrent downloads. Default is $XDG_CACHE_HOME/ani-cli/torrents.
+.TP
+\fBANI_CLI_NYAA_BASE\fR
+Base URL for nyaa (mirror override). Default is https://nyaa.si.
+.TP
+\fBANI_CLI_NYAA_CATEGORY\fR
+Nyaa category filter. Default is 1_2 (Anime, English-translated).
+.TP
+\fBANI_CLI_NYAA_FILTER\fR
+Nyaa filter: 0=no filter, 1=no remakes, 2=trusted only. Default is 0.
 .PP
 .SH EPISODE SELECTION
 .PP
